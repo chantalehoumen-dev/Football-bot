@@ -4,96 +4,91 @@ import os
 
 app = Flask(__name__)
 
-API_KEY = os.getenv("API_FOOTBALL_KEY")
-BASE_URL = "https://v3.football.api-sports.io"
+API_KEY = os.getenv("API_KEY")
+API_HOST = "api-football-v1.p.rapidapi.com"
+
+LEAGUES = [39, 140, 135, 78, 61]  # PL, Liga, Serie A, Bundesliga, Ligue 1
+SEASON = 2024
 
 headers = {
-    "x-apisports-key": API_KEY
+    "X-RapidAPI-Key": API_KEY,
+    "X-RapidAPI-Host": API_HOST
 }
 
-# 🔎 Récupérer ID équipe
 def get_team_id(team_name):
-    response = requests.get(
-        f"{BASE_URL}/teams?search={team_name}",
-        headers=headers
-    )
+    url = f"https://{API_HOST}/v3/teams"
+    querystring = {"search": team_name}
+    response = requests.get(url, headers=headers, params=querystring)
     data = response.json()
-    if data["results"] > 0:
+    if data["response"]:
         return data["response"][0]["team"]["id"]
     return None
 
-
-# 📊 Récupérer 10 derniers matchs
 def get_last_matches(team_id):
-    response = requests.get(
-        f"{BASE_URL}/fixtures?team={team_id}&last=10",
-        headers=headers
-    )
-    return response.json()
+    url = f"https://{API_HOST}/v3/fixtures"
+    querystring = {
+        "team": team_id,
+        "season": SEASON,
+        "last": 10
+    }
+    response = requests.get(url, headers=headers, params=querystring)
+    data = response.json()
+    return data["response"]
 
-
-# 📈 Analyse statistique simple
 def analyze_matches(matches):
     total_goals = 0
-    halftime_goals = 0
+    ht_goals = 0
     scores = []
 
-    for match in matches["response"]:
-        ft_home = match["goals"]["home"] or 0
-        ft_away = match["goals"]["away"] or 0
+    for match in matches:
+        home = match["goals"]["home"] or 0
+        away = match["goals"]["away"] or 0
         ht_home = match["score"]["halftime"]["home"] or 0
         ht_away = match["score"]["halftime"]["away"] or 0
 
-        total_goals += ft_home + ft_away
-        halftime_goals += ht_home + ht_away
+        total_goals += home + away
+        ht_goals += ht_home + ht_away
+        scores.append(f"{home}-{away}")
 
-        scores.append(f"{ft_home}-{ft_away}")
-
-    avg_goals = total_goals / 10 if total_goals else 0
-    avg_ht_goals = halftime_goals / 10 if halftime_goals else 0
+    avg_goals = round(total_goals / len(matches), 2) if matches else 0
+    avg_ht_goals = round(ht_goals / len(matches), 2) if matches else 0
 
     return {
-        "moyenne_buts_match": round(avg_goals, 2),
-        "moyenne_buts_mi_temps": round(avg_ht_goals, 2),
-        "derniers_scores": scores
+        "scores_10_derniers_matchs": scores,
+        "moyenne_buts_match": avg_goals,
+        "moyenne_buts_mi_temps": avg_ht_goals
     }
 
-
-# ⚽ Route principale
-@app.route("/analyse", methods=["GET"])
+@app.route("/analyse")
 def analyse():
     team1 = request.args.get("team1")
     team2 = request.args.get("team2")
 
-    if not team1 or not team2:
-        return jsonify({"error": "Veuillez fournir team1 et team2"}), 400
+    id1 = get_team_id(team1)
+    id2 = get_team_id(team2)
 
-    team1_id = get_team_id(team1)
-    team2_id = get_team_id(team2)
+    if not id1 or not id2:
+        return jsonify({"error": "Equipe non trouvée"})
 
-    if not team1_id or not team2_id:
-        return jsonify({"error": "Equipe non trouvée"}), 404
+    matches1 = get_last_matches(id1)
+    matches2 = get_last_matches(id2)
 
-    matches1 = get_last_matches(team1_id)
-    matches2 = get_last_matches(team2_id)
+    stats1 = analyze_matches(matches1)
+    stats2 = analyze_matches(matches2)
 
-    analysis1 = analyze_matches(matches1)
-    analysis2 = analyze_matches(matches2)
-
-    # 🎯 Simulation simple score probable
-    predicted_goals_team1 = round(analysis1["moyenne_buts_match"] / 2)
-    predicted_goals_team2 = round(analysis2["moyenne_buts_match"] / 2)
-
-    prediction = f"{predicted_goals_team1}-{predicted_goals_team2}"
+    prediction = f"{round(stats1['moyenne_buts_match']/2)}-{round(stats2['moyenne_buts_match']/2)}"
 
     return jsonify({
         "equipe1": team1,
-        "stats_equipe1": analysis1,
         "equipe2": team2,
-        "stats_equipe2": analysis2,
-        "prediction_score_probable": prediction
+        "stats_equipe1": stats1,
+        "stats_equipe2": stats2,
+        "prediction_score_estime": prediction
     })
 
+@app.route("/")
+def home():
+    return "Football-bot PRO actif !"
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=10000)
