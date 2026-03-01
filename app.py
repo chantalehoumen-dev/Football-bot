@@ -91,3 +91,12 @@ def analyze():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=10000)
+@app.route("/analyse")
+def analyse():
+    team1 = request.args.get("team1")
+    team2 = request.args.get("team2")
+
+    if not team1 or not team2:
+        return "Veuillez fournir team1 et team2 dans l'URL"
+
+    return f"Analyse demandée pour {team1} vs {team2}"
