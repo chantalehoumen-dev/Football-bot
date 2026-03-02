@@ -31,4 +31,13 @@ def matchs_du_jour():
 
     for match in data["response"]:
         team1 = match["teams"]["home"]["name"]
-        team2 = match["teams"]["away"]["
+        team2 = match["teams"]["away"]["name"]
+        league = match["league"]["name"]
+
+        matchs.append({
+            "competition": league,
+            "equipe_domicile": team1,
+            "equipe_exterieur": team2
+        })
+
+    return jsonify(matchs)
